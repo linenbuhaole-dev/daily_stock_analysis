@@ -4,26 +4,54 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-qwen:
+  test-llm:
     name: Test Qwen Connection
     runs-on: ubuntu-latest
     timeout-minutes: 2
 
     steps:
-      - name: Test Qwen API
+      - name: Test LLM API
         env:
-          BASE_URL: https://ws-y6j3blg710191x6y.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-          API_KEY: ${{ secrets.LLM_DASHSCOPE_API_KEY }}
-          MODEL: qwen3.7-plus
+          API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          LITELLM_MODEL: ${{ vars.LITELLM_MODEL }}
+
         run: |
+          set -e
+
+          echo "=========================================="
+          echo "LLM Smoke Test"
+          echo "=========================================="
+
           if [ -z "$API_KEY" ]; then
-            echo "::error::LLM_DASHSCOPE_API_KEY is not configured"
+            echo "::error::OPENAI_API_KEY is not configured"
             exit 1
           fi
 
-          echo "Model: $MODEL"
-          echo "Base URL: $BASE_URL"
-          echo "API key: configured"
+          if [ -z "$BASE_URL" ]; then
+            echo "::error::OPENAI_BASE_URL is not configured"
+            exit 1
+          fi
+
+          if [ -z "$LITELLM_MODEL" ]; then
+            echo "::error::LITELLM_MODEL is not configured"
+            exit 1
+          fi
+
+          # LiteLLM 使用 openai/qwen3.7-plus
+          # 百炼 OpenAI-compatible API 实际需要 qwen3.7-plus
+          MODEL="${LITELLM_MODEL#openai/}"
+
+          # 防止 Base URL 末尾带 /
+          BASE_URL="${BASE_URL%/}"
+
+          echo "OPENAI_API_KEY: configured"
+          echo "OPENAI_BASE_URL: $BASE_URL"
+          echo "LITELLM_MODEL: $LITELLM_MODEL"
+          echo "Provider model: $MODEL"
+          echo ""
+
+          START_TIME=$(date +%s)
 
           HTTP_CODE=$(curl \
             --silent \
@@ -46,14 +74,28 @@ jobs:
               \"stream\": false
             }")
 
-          echo "HTTP status: $HTTP_CODE"
+          END_TIME=$(date +%s)
+          ELAPSED=$((END_TIME - START_TIME))
 
-          cat response.json
+          echo "HTTP status: $HTTP_CODE"
+          echo "Elapsed: ${ELAPSED}s"
           echo ""
 
+          if [ -f response.json ]; then
+            echo "Provider response:"
+            cat response.json
+            echo ""
+          fi
+
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::error::LLM request failed"
+            echo "::error::LLM request failed with HTTP $HTTP_CODE"
             exit 1
           fi
 
-          echo "✅ Qwen LLM connection successful"
+          if ! grep -q '"choices"' response.json; then
+            echo "::error::HTTP 200 received but response does not contain choices"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ LLM connection successful"
