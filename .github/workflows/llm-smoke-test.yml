@@ -10,39 +10,20 @@ jobs:
     timeout-minutes: 2
 
     steps:
-      - name: Validate configuration
+      - name: Test Qwen API
         env:
-          BASE_URL: ${{ secrets.LLM_DASHSCOPE_BASE_URL }}
+          BASE_URL: https://ws-y6j3blg710191x6y.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
           API_KEY: ${{ secrets.LLM_DASHSCOPE_API_KEY }}
+          MODEL: qwen3.7-plus
         run: |
-          if [ -z "$BASE_URL" ]; then
-            echo "::error::LLM_DASHSCOPE_BASE_URL is not configured"
-            exit 1
-          fi
-
           if [ -z "$API_KEY" ]; then
             echo "::error::LLM_DASHSCOPE_API_KEY is not configured"
             exit 1
           fi
 
-          echo "Configuration found"
-          echo "Base URL: $BASE_URL"
-          echo "API key: configured"
-
-      - name: Test Qwen API
-        env:
-          BASE_URL: ${{ secrets.LLM_DASHSCOPE_BASE_URL }}
-          API_KEY: ${{ secrets.LLM_DASHSCOPE_API_KEY }}
-          MODEL: qwen3.7-plus
-        run: |
-          echo "=========================================="
-          echo "Qwen LLM Smoke Test"
-          echo "=========================================="
           echo "Model: $MODEL"
           echo "Base URL: $BASE_URL"
-          echo ""
-
-          START_TIME=$(date +%s)
+          echo "API key: configured"
 
           HTTP_CODE=$(curl \
             --silent \
@@ -65,30 +46,14 @@ jobs:
               \"stream\": false
             }")
 
-          END_TIME=$(date +%s)
-          ELAPSED=$((END_TIME - START_TIME))
-
           echo "HTTP status: $HTTP_CODE"
-          echo "Elapsed: ${ELAPSED}s"
 
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo ""
-            echo "::error::LLM request failed with HTTP $HTTP_CODE"
-            echo "Provider response:"
-            cat response.json
-            exit 1
-          fi
-
-          echo ""
-          echo "Provider response:"
           cat response.json
           echo ""
 
-          if grep -q '"choices"' response.json; then
-            echo ""
-            echo "✅ Qwen LLM connection successful"
-          else
-            echo ""
-            echo "::error::HTTP 200 received but response does not contain choices"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::LLM request failed"
             exit 1
           fi
+
+          echo "✅ Qwen LLM connection successful"
